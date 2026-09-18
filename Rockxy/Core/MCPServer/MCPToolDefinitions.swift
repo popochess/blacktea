@@ -203,4 +203,113 @@ enum MCPToolDefinitions {
             "properties": .object([:]),
         ])
     )
+
+    // MARK: - Write Tools
+
+    /// Rule-mutating tools. These are listed only when the user has opted in via
+    /// ``MCPWriteAccessPolicy``; they are not part of ``allTools``.
+    static let writeTools: [MCPToolDefinition] = [
+        createMapLocalRule,
+        setRuleEnabled,
+        deleteRule,
+    ]
+
+    static let createMapLocalRule = MCPToolDefinition(
+        name: "create_map_local_rule",
+        description: """
+        Create a Map Local rule that serves a local file as the response for matching requests. \
+        Requires MCP write access to be enabled in Settings. The file must already exist on disk.
+        """,
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "name": .object([
+                    "type": "string",
+                    "description": "Display name for the rule",
+                ]),
+                "url_pattern": .object([
+                    "type": "string",
+                    "description": "Pattern matched against the full request URL, interpreted per match_type",
+                ]),
+                "file_path": .object([
+                    "type": "string",
+                    "description": "Absolute path (or ~-relative) to the file or directory served as the response",
+                ]),
+                "match_type": .object([
+                    "type": "string",
+                    "description": "How url_pattern is interpreted: 'regex' (default) or 'wildcard'",
+                    "enum": .array([.string("regex"), .string("wildcard")]),
+                    "default": .string("regex"),
+                ]),
+                "method": .object([
+                    "type": "string",
+                    "description": "Restrict the rule to one HTTP method (e.g. GET). Omit to match any method.",
+                ]),
+                "status_code": .object([
+                    "type": "integer",
+                    "description": "Response status code (default 200)",
+                    "default": .int(200),
+                    "minimum": .int(100),
+                    "maximum": .int(599),
+                ]),
+                "content_type": .object([
+                    "type": "string",
+                    "description": "Content-Type response header (default application/json). Ignored for directories.",
+                    "default": .string("application/json"),
+                ]),
+                "delay_ms": .object([
+                    "type": "integer",
+                    "description": "Artificial response delay in milliseconds (default 0)",
+                    "default": .int(0),
+                    "minimum": .int(0),
+                ]),
+                "enabled": .object([
+                    "type": "boolean",
+                    "description": "Whether the rule is active once created (default true)",
+                    "default": .bool(true),
+                ]),
+            ]),
+            "required": .array([.string("name"), .string("url_pattern"), .string("file_path")]),
+        ])
+    )
+
+    static let setRuleEnabled = MCPToolDefinition(
+        name: "set_rule_enabled",
+        description: """
+        Enable or disable an existing proxy rule by id. Requires MCP write access to be enabled in Settings. \
+        Use list_rules to discover rule ids.
+        """,
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "rule_id": .object([
+                    "type": "string",
+                    "description": "UUID of the rule, as returned by list_rules",
+                ]),
+                "enabled": .object([
+                    "type": "boolean",
+                    "description": "True to enable the rule, false to disable it",
+                ]),
+            ]),
+            "required": .array([.string("rule_id"), .string("enabled")]),
+        ])
+    )
+
+    static let deleteRule = MCPToolDefinition(
+        name: "delete_rule",
+        description: """
+        Permanently delete an existing proxy rule by id. Requires MCP write access to be enabled in Settings. \
+        Use list_rules to discover rule ids.
+        """,
+        inputSchema: .object([
+            "type": "object",
+            "properties": .object([
+                "rule_id": .object([
+                    "type": "string",
+                    "description": "UUID of the rule, as returned by list_rules",
+                ]),
+            ]),
+            "required": .array([.string("rule_id")]),
+        ])
+    )
 }
