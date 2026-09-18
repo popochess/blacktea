@@ -9,14 +9,35 @@ nonisolated(unsafe) private let mcpToolRegistryLogger = Logger(
 // MARK: - MCPToolRegistry
 
 struct MCPToolRegistry {
+    // MARK: Lifecycle
+
+    init(
+        flowService: MCPFlowQueryService,
+        statusService: MCPStatusService,
+        ruleService: MCPRuleQueryService,
+        ruleMutationService: MCPRuleMutationService? = nil
+    ) {
+        self.flowService = flowService
+        self.statusService = statusService
+        self.ruleService = ruleService
+        self.ruleMutationService = ruleMutationService
+    }
+
     // MARK: Internal
 
     let flowService: MCPFlowQueryService
     let statusService: MCPStatusService
     let ruleService: MCPRuleQueryService
 
+    /// Present only when MCP write access is enabled. When `nil`, the
+    /// rule-mutating tools are neither advertised nor callable.
+    let ruleMutationService: MCPRuleMutationService?
+
     func listTools() -> MCPToolsListResult {
-        MCPToolsListResult(tools: MCPToolDefinitions.allTools)
+        guard ruleMutationService != nil else {
+            return MCPToolsListResult(tools: MCPToolDefinitions.allTools)
+        }
+        return MCPToolsListResult(tools: MCPToolDefinitions.allTools + MCPToolDefinitions.writeTools)
     }
 
     func callTool(params: MCPToolCallParams) async -> MCPToolCallResult {
@@ -94,6 +115,33 @@ struct MCPToolRegistry {
         case "get_ssl_proxying_list":
             return await statusService.getSSLProxyingList()
 
+        case "create_map_local_rule":
+            guard let mutationService = ruleMutationService else {
+                return writeAccessDisabledResult(name: params.name)
+            }
+            return await mutationService.createMapLocalRule(arguments: args)
+
+        case "set_rule_enabled":
+            guard let mutationService = ruleMutationService else {
+                return writeAccessDisabledResult(name: params.name)
+            }
+            guard let ruleID = extractUUID("rule_id", from: args) else {
+                return missingParamResult("rule_id")
+            }
+            guard case let .bool(enabled) = args["enabled"] else {
+                return missingParamResult("enabled")
+            }
+            return await mutationService.setRuleEnabled(ruleID: ruleID, enabled: enabled)
+
+        case "delete_rule":
+            guard let mutationService = ruleMutationService else {
+                return writeAccessDisabledResult(name: params.name)
+            }
+            guard let ruleID = extractUUID("rule_id", from: args) else {
+                return missingParamResult("rule_id")
+            }
+            return await mutationService.deleteRule(ruleID: ruleID)
+
         default:
             mcpToolRegistryLogger.warning("Unknown tool called: \(params.name, privacy: .public)")
             return unknownToolResult(name: params.name)
@@ -149,6 +197,16 @@ struct MCPToolRegistry {
     private func invalidParamResult(_ paramName: String, message: String) -> MCPToolCallResult {
         MCPToolCallResult(
             content: [.text(encodeErrorJSON(["error": message, "param": paramName]))],
+            isError: true
+        )
+    }
+
+    private func writeAccessDisabledResult(name: String) -> MCPToolCallResult {
+        mcpToolRegistryLogger.warning("Write tool called while disabled: \(name, privacy: .public)")
+        return MCPToolCallResult(
+            content: [.text(encodeErrorJSON([
+                "error": "MCP write access is disabled. Enable it in Settings > MCP to use \(name).",
+            ]))],
             isError: true
         )
     }

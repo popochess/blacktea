@@ -105,10 +105,18 @@ final class MCPServerCoordinator {
             redactionPolicy: redactionPolicy
         )
 
+        // Rule-mutating tools exist only when the user opted in; otherwise the
+        // registry keeps the upstream read-only tool set.
+        let writeAccess = MCPWriteAccessPolicy()
+        let ruleMutationService = writeAccess.isEnabled
+            ? MCPRuleMutationService(ruleEngine: RuleEngine.shared)
+            : nil
+
         let registry = MCPToolRegistry(
             flowService: flowService,
             statusService: statusService,
-            ruleService: ruleService
+            ruleService: ruleService,
+            ruleMutationService: ruleMutationService
         )
 
         let server = MCPServer(
